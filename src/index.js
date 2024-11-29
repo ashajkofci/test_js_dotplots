@@ -31,28 +31,31 @@ async function initializePlot() {
 
     const metadata = dataObject.metadata;
     const data = dataObject.data;
-
+    console.log("Reshape Data");
     // Number of parameters (columns in the data)
     const numParameters = metadata.numParameters;
 
-    // Transform data into nx6 format
-    const reshapedData = [];
+    // Preallocate arrays for transformed channels
+    const FL1 = [];
+    const FL2 = [];
+    const SSC = [];
+    const FSC = [];
+
+    // Combine reshaping, log10 transformation, and channel extraction
     for (let i = 0; i < data.length && i < 1200000; i += numParameters) {
-      reshapedData.push(data.slice(i, i + numParameters));
+      for (let j = 0; j < numParameters; j++) {
+        const value = data[i + j];
+        const transformedValue = j === 0 ? value : Math.log10(value);
+
+        // Extract specific channels based on index
+        if (j === 1) SSC.push(transformedValue); // Second parameter (SSC)
+        else if (j === 2) FL1.push(transformedValue); // Third parameter (FL1)
+        else if (j === 3) FL2.push(transformedValue); // Fourth parameter (FL2)
+        else if (j === 4) FSC.push(transformedValue); // Fifth parameter (FSC)
+      }
     }
 
-    // Apply log10 transformation to all channels except TIME (first channel)
-    const transformedData = reshapedData.map((row) => {
-      return row.map((value, index) => {
-        return index === 0 ? value : Math.log10(value);
-      });
-    });
-
-    // Extract specific channels for plotting
-    const FL1 = transformedData.map((row) => row[2]); // FL1 is the third parameter (index 2)
-    const FL2 = transformedData.map((row) => row[3]); // FL2 is the fourth parameter (index 3)
-    const SSC = transformedData.map((row) => row[1]); // SSC is the second parameter (index 1)
-    const FSC = transformedData.map((row) => row[4]); // FSC is the fifth parameter (index 4)
+    console.log("Reshape Data");
 
     // Initialize default plot
     plotScatterWithDensity(
@@ -156,17 +159,54 @@ function calculateDensity(x, y, bins, range) {
     histogram: histogram,
   };
 }
-
-// Function to check if a point is inside a polygon
-function isPointInPolygon(point, polygon) {
-  const [px, py] = point;
-  let inside = false;
+// Preprocess polygon to compute slopes and bounding box
+function preprocessPolygon(polygon) {
+  const edges = [];
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
 
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const [xi, yi] = polygon[i];
     const [xj, yj] = polygon[j];
-    const intersect =
-      yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    edges.push({
+      xi,
+      yi,
+      xj,
+      yj,
+      slope: (xj - xi) / (yj - yi), // Precompute slope
+    });
+
+    // Update bounding box
+    minX = Math.min(minX, xi);
+    minY = Math.min(minY, yi);
+    maxX = Math.max(maxX, xi);
+    maxY = Math.max(maxY, yi);
+  }
+
+  return { edges, boundingBox: { minX, minY, maxX, maxY } };
+}
+
+// Optimized function to check if a point is inside a polygon
+function isPointInPolygon(point, preprocessedPolygon) {
+  const [px, py] = point;
+  const { edges, boundingBox } = preprocessedPolygon;
+
+  // Quick bounding box check
+  if (
+    px < boundingBox.minX ||
+    px > boundingBox.maxX ||
+    py < boundingBox.minY ||
+    py > boundingBox.maxY
+  ) {
+    return false;
+  }
+
+  // Ray-casting algorithm
+  let inside = false;
+  for (const { xi, yi, xj, yj, slope } of edges) {
+    const intersect = yi > py !== yj > py && px < slope * (py - yi) + xi;
     if (intersect) inside = !inside;
   }
 
@@ -178,7 +218,9 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
   const bins = 225;
   const viewerBins = 430;
   const range = [2, 6.7]; // Restrict the range to 2 to 6.7
+  console.log("Calculate Density");
   const { density } = calculateDensity(x, y, bins, range);
+  console.log("Calculate Density");
 
   const colorMaps = {
     Parula: [
@@ -224,7 +266,12 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
     [6.7, 5.9],
     [6.7, 0.0],
   ];
+  console.log("preprocess gate");
+  const preprocessedPolygon = preprocessPolygon(polygon);
+  console.log("preprocess gate");
 
+  // 40 ms
+  console.log("Filter points outside of range");
   // Filter points within the restricted range
   const filteredPoints = x
     .map((val, i) => ({ x: x[i], y: y[i], density: density[i] }))
@@ -232,10 +279,17 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
       (point) =>
         point.x >= 2 && point.x <= 6.7 && point.y >= 2 && point.y <= 6.7
     );
+  console.log("Filter points outside of range");
 
+  // 120 ms
+  console.log("Sort points by density");
   filteredPoints.sort((a, b) => a.density - b.density);
+  console.log("Sort points by density");
 
-  console.log(filteredPoints.length + " points");
+  console.log("Before processing: " + filteredPoints.length + " points");
+
+  // 30 ms
+  console.log("Filter points that are under higher density points");
   // Create a spatial grid
   const grid = new Map();
   const cellSize = (range[1] - range[0]) / viewerBins;
@@ -252,13 +306,11 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
       uniquePoints.push(point);
     }
   });
+  console.log("Filter points that are under higher density points");
+  console.log("After processing: " + uniquePoints.length + " points");
 
-  const sortedX = uniquePoints.map((p) => p.x);
-  const sortedY = uniquePoints.map((p) => p.y);
-  const sortedDensity = uniquePoints.map((p) => p.density);
-
-  console.log(uniquePoints.length + " points");
-
+  // 5ms
+  console.log("Create series");
   const densityBins = 9;
   const binSize = 1 / densityBins;
   const seriesData = Array.from({ length: densityBins }, () => []);
@@ -270,7 +322,10 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
     );
     seriesData[binIndex].push([point.x, point.y]);
   });
+  console.log("Create series");
 
+  // GATING PART (70ms)
+  console.log("Gating");
   // Filter points within the restricted range and the polygon
   const gatedPoints = x
     .map((val, i) => ({ x: x[i], y: y[i], density: density[i] }))
@@ -280,16 +335,15 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
         point.x <= 6.7 &&
         point.y >= 2 &&
         point.y <= 6.7 &&
-        isPointInPolygon([point.x, point.y], polygon)
+        isPointInPolygon([point.x, point.y], preprocessedPolygon)
     );
   const sortedGatedX = gatedPoints.map((p) => p.x);
   const sortedGatedY = gatedPoints.map((p) => p.y);
 
-  // Dispose of any existing chart instance
-  const chartElement = document.getElementById(containerId);
-  if (echarts.getInstanceByDom(chartElement)) {
-    echarts.dispose(chartElement);
-  }
+  console.log("Gating");
+
+  // 1D Histograms (10 ms)
+  console.log("1D histograms");
 
   const xHistogram = sortedGatedX.reduce((acc, val) => {
     const bin = Math.floor(((val - range[0]) / (range[1] - range[0])) * bins);
@@ -303,7 +357,16 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
     return acc;
   }, Array(bins).fill(0));
 
+  console.log("1D histograms");
+  console.log("Create chart");
+  // Dispose of any existing chart instance
+  const chartElement = document.getElementById(containerId);
+  if (echarts.getInstanceByDom(chartElement)) {
+    echarts.dispose(chartElement);
+  }
+
   const chart = echarts.init(document.getElementById(containerId), "light", {}); // Use light theme
+  console.log("Create chart");
 
   const scatterSeries = seriesData.map((data, index) => ({
     type: "scatter",
