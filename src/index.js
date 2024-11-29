@@ -37,7 +37,7 @@ async function initializePlot() {
 
     // Transform data into nx6 format
     const reshapedData = [];
-    for (let i = 0; i < data.length && i < 900000; i += numParameters) {
+    for (let i = 0; i < data.length && i < 1000000; i += numParameters) {
       reshapedData.push(data.slice(i, i + numParameters));
     }
 
@@ -176,6 +176,7 @@ function isPointInPolygon(point, polygon) {
 // Function to create a scatter plot with density coloring using ECharts
 function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
   const bins = 200;
+  const viewerBins = 500;
   const range = [2, 6.7]; // Restrict the range to 2 to 6.7
   const { density } = calculateDensity(x, y, bins, range);
 
@@ -234,9 +235,29 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
 
   filteredPoints.sort((a, b) => a.density - b.density);
 
-  const sortedX = filteredPoints.map((p) => p.x);
-  const sortedY = filteredPoints.map((p) => p.y);
-  const sortedDensity = filteredPoints.map((p) => p.density);
+  console.log(filteredPoints.length + " points");
+  // Create a spatial grid
+  const grid = new Map();
+  const cellSize = (range[1] - range[0]) / viewerBins;
+
+  const uniquePoints = [];
+  filteredPoints.forEach((point) => {
+    const xCell = Math.floor((point.x - range[0]) / cellSize);
+    const yCell = Math.floor((point.y - range[0]) / cellSize);
+    const cellKey = `${xCell},${yCell}`;
+
+    // Only keep the first (highest-density) point for each cell
+    if (!grid.has(cellKey)) {
+      grid.set(cellKey, true);
+      uniquePoints.push(point);
+    }
+  });
+
+  const sortedX = uniquePoints.map((p) => p.x);
+  const sortedY = uniquePoints.map((p) => p.y);
+  const sortedDensity = uniquePoints.map((p) => p.density);
+
+  console.log(uniquePoints.length + " points");
 
   // Filter points within the restricted range and the polygon
   const gatedPoints = x
@@ -270,7 +291,7 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
     return acc;
   }, Array(bins).fill(0));
 
-  const chart = echarts.init(document.getElementById(containerId), "light"); // Use light theme
+  const chart = echarts.init(document.getElementById(containerId), "light", {}); // Use light theme
 
   const option = {
     title: {
@@ -352,15 +373,15 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
     series: [
       {
         type: "scatterGL",
-        progressive: 1e6,
-        symbolSize: 1,
-        silent: true,
+        progressive: 0,
+        symbolSize: 1.2,
         data: sortedX.map((val, i) => [
           sortedX[i],
           sortedY[i],
           sortedDensity[i],
         ]),
         itemStyle: {
+          opacity: 1,
           color: function (params) {
             const value = params.data[2];
             const colorIndex = Math.min(
