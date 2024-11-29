@@ -259,6 +259,18 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
 
   console.log(uniquePoints.length + " points");
 
+  const densityBins = 9;
+  const binSize = 1 / densityBins;
+  const seriesData = Array.from({ length: densityBins }, () => []);
+
+  uniquePoints.forEach((point) => {
+    const binIndex = Math.min(
+      Math.floor(point.density / binSize),
+      densityBins - 1
+    );
+    seriesData[binIndex].push([point.x, point.y]);
+  });
+
   // Filter points within the restricted range and the polygon
   const gatedPoints = x
     .map((val, i) => ({ x: x[i], y: y[i], density: density[i] }))
@@ -292,6 +304,54 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
   }, Array(bins).fill(0));
 
   const chart = echarts.init(document.getElementById(containerId), "light", {}); // Use light theme
+
+  const scatterSeries = seriesData.map((data, index) => ({
+    type: "scatter",
+    data,
+    symbolSize: 1.2,
+    progressive: 0,
+    large: true,
+    itemStyle: {
+      opacity: 1.0,
+      color: colormapColors[index],
+    },
+  }));
+  scatterSeries.push(
+    {
+      type: "bar",
+      xAxisIndex: 1,
+      barCategoryGap: "-100%",
+      yAxisIndex: 1,
+      data: xHistogram,
+      itemStyle: {
+        color: "#0363e1",
+      },
+      large: true,
+    },
+    {
+      type: "bar",
+      xAxisIndex: 2,
+      barCategoryGap: "-100%",
+      yAxisIndex: 2,
+      data: yHistogram,
+      itemStyle: {
+        color: "#0363e1",
+      },
+      large: true,
+    },
+    {
+      type: "line",
+      data: polygon,
+      lineStyle: {
+        color: "red",
+        width: 3,
+      },
+      areaStyle: {
+        color: "rgba(255, 0, 0, 0.0)",
+      },
+      showSymbol: false,
+    }
+  );
 
   const option = {
     title: {
@@ -370,63 +430,7 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
         axisLabel: { show: false },
       },
     ],
-    series: [
-      {
-        type: "scatterGL",
-        progressive: 0,
-        symbolSize: 1.2,
-        data: sortedX.map((val, i) => [
-          sortedX[i],
-          sortedY[i],
-          sortedDensity[i],
-        ]),
-        itemStyle: {
-          opacity: 1,
-          color: function (params) {
-            const value = params.data[2];
-            const colorIndex = Math.min(
-              Math.floor(value * (colormapColors.length - 1)),
-              colormapColors.length - 1
-            );
-            return colormapColors[colorIndex];
-          },
-        },
-      },
-      {
-        type: "bar",
-        xAxisIndex: 1,
-        barCategoryGap: "-100%",
-        yAxisIndex: 1,
-        data: xHistogram,
-        itemStyle: {
-          color: "#0363e1",
-        },
-        large: true,
-      },
-      {
-        type: "bar",
-        xAxisIndex: 2,
-        barCategoryGap: "-100%",
-        yAxisIndex: 2,
-        data: yHistogram,
-        itemStyle: {
-          color: "#0363e1",
-        },
-        large: true,
-      },
-      {
-        type: "line",
-        data: polygon,
-        lineStyle: {
-          color: "red",
-          width: 3,
-        },
-        areaStyle: {
-          color: "rgba(255, 0, 0, 0.0)",
-        },
-        showSymbol: false,
-      },
-    ],
+    series: scatterSeries,
     tooltip: {
       show: false,
     },
