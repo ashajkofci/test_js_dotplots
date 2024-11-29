@@ -128,7 +128,7 @@ function calculateDensity(x, y, bins, range) {
   const normalizedY = y.map(
     (val) => ((val - range[0]) / (range[1] - range[0])) * bins
   );
-
+  // this could be optimized away by allocating it only once (bins do not change)
   const histogram = Array.from({ length: bins }, () => Array(bins).fill(0));
 
   for (let i = 0; i < x.length; i++) {
