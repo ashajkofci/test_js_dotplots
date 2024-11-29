@@ -2,7 +2,7 @@
 // <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
 // Function to fetch data from the endpoint
 import * as echarts from "echarts";
-import * as echartsgl from "echarts-gl";
+//import * as echartsgl from "echarts-gl";
 
 async function fetchData(url, token) {
   const response = await fetch(url, {
@@ -37,7 +37,7 @@ async function initializePlot() {
 
     // Transform data into nx6 format
     const reshapedData = [];
-    for (let i = 0; i < data.length && i < 1000000; i += numParameters) {
+    for (let i = 0; i < data.length && i < 1200000; i += numParameters) {
       reshapedData.push(data.slice(i, i + numParameters));
     }
 
@@ -175,8 +175,8 @@ function isPointInPolygon(point, polygon) {
 
 // Function to create a scatter plot with density coloring using ECharts
 function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
-  const bins = 200;
-  const viewerBins = 500;
+  const bins = 225;
+  const viewerBins = 430;
   const range = [2, 6.7]; // Restrict the range to 2 to 6.7
   const { density } = calculateDensity(x, y, bins, range);
 
