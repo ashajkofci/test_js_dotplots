@@ -31,28 +31,30 @@ async function initializePlot() {
 
     const metadata = dataObject.metadata;
     const data = dataObject.data;
+
+    // 30 ms => optimized
     console.log("Reshape Data");
-    // Number of parameters (columns in the data)
+
     const numParameters = metadata.numParameters;
+    const maxDataPoints = 1500000;
 
-    // Preallocate arrays for transformed channels
-    const FL1 = [];
-    const FL2 = [];
-    const SSC = [];
-    const FSC = [];
+    const numPoints = Math.min(
+      data.length / numParameters,
+      maxDataPoints / numParameters
+    );
 
-    // Combine reshaping, log10 transformation, and channel extraction
-    for (let i = 0; i < data.length && i < 1500000; i += numParameters) {
-      for (let j = 0; j < numParameters; j++) {
-        const value = data[i + j];
-        const transformedValue = j === 0 ? value : Math.log10(value);
+    const FL1 = new Float32Array(numPoints);
+    const FL2 = new Float32Array(numPoints);
+    const SSC = new Float32Array(numPoints);
+    const FSC = new Float32Array(numPoints);
 
-        // Extract specific channels based on index
-        if (j === 1) SSC.push(transformedValue); // Second parameter (SSC)
-        else if (j === 2) FL1.push(transformedValue); // Third parameter (FL1)
-        else if (j === 3) FL2.push(transformedValue); // Fourth parameter (FL2)
-        else if (j === 4) FSC.push(transformedValue); // Fifth parameter (FSC)
-      }
+    for (let i = 0; i < numPoints; i++) {
+      const baseIndex = i * numParameters;
+
+      SSC[i] = Math.log10(data[baseIndex + 1]);
+      FL1[i] = Math.log10(data[baseIndex + 2]);
+      FL2[i] = Math.log10(data[baseIndex + 3]);
+      FSC[i] = Math.log10(data[baseIndex + 4]);
     }
 
     console.log("Reshape Data");
@@ -120,15 +122,6 @@ async function initializePlot() {
 
 // Function to calculate 2D histogram density
 function calculateDensity(x, y, bins, range) {
-  const xEdges = Array.from(
-    { length: bins + 1 },
-    (_, i) => range[0] + (i * (range[1] - range[0])) / bins
-  );
-  const yEdges = Array.from(
-    { length: bins + 1 },
-    (_, i) => range[0] + (i * (range[1] - range[0])) / bins
-  );
-
   const normalizedX = x.map(
     (val) => ((val - range[0]) / (range[1] - range[0])) * bins
   );
@@ -348,15 +341,10 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
 
   // GATING PART (30ms) => already optimized
   console.log("Gating");
-  // Filter points within the restricted range and the polygon
-  // Arrays for gated points
   const sortedGatedX = [];
   const sortedGatedY = [];
 
-  // Process points in a single loop
   for (let i = 0; i < filteredPoints.length; i++) {
-    // Check bounds
-    // Check if point is inside the polygon
     if (
       isPointInPolygon(
         [filteredPoints[i].x, filteredPoints[i].y],
