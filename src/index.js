@@ -2,6 +2,7 @@
 // <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
 // Function to fetch data from the endpoint
 import * as echarts from "echarts";
+import * as echartsgl from "echarts-gl";
 
 async function fetchData(url, token) {
   const response = await fetch(url, {
@@ -21,22 +22,22 @@ async function fetchData(url, token) {
 // Main function to initialize and plot the data
 async function initializePlot() {
   const url =
-    "https://apitest.bactocloud.com/data/fcs/6717bc393e62a7760507522a";
+    "https://apitest.bactocloud.com/data/fcs/673816ca06e0eb8afdd9c63a";
   const token =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySUQiOiI2NmNmNjVkM2ZhMmFmOTk5MTcxYmMwZTIiLCJleHAiOjE3NDcwNzQxOTB9.f_1PZQ0OOhQ1ufsB0NPg63GunW2bJWu-6ljm90yuJjI";
 
   try {
     const dataObject = await fetchData(url, token);
 
-    const metadata = dataObject.Metadata;
-    const data = dataObject.Data;
+    const metadata = dataObject.metadata;
+    const data = dataObject.data;
 
     // Number of parameters (columns in the data)
-    const numParameters = metadata.NumParameters;
+    const numParameters = metadata.numParameters;
 
     // Transform data into nx6 format
     const reshapedData = [];
-    for (let i = 0; i < data.length && i < 90000; i += numParameters) {
+    for (let i = 0; i < data.length && i < 900000; i += numParameters) {
       reshapedData.push(data.slice(i, i + numParameters));
     }
 
@@ -350,15 +351,15 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
     ],
     series: [
       {
-        type: "scatter",
+        type: "scatterGL",
+        progressive: 1e6,
+        symbolSize: 1,
+        silent: true,
         data: sortedX.map((val, i) => [
           sortedX[i],
           sortedY[i],
           sortedDensity[i],
         ]),
-        symbolSize: function (val) {
-          return 2;
-        },
         itemStyle: {
           color: function (params) {
             const value = params.data[2];
@@ -408,6 +409,7 @@ function plotScatterWithDensity(x, y, xLabel, yLabel, containerId, colormap) {
     tooltip: {
       show: false,
     },
+    animation: false,
   };
 
   chart.setOption(option);
